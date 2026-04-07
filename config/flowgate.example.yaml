@@ -1,0 +1,241 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlowGate example configurations
+#
+# Three ready-to-use examples. Copy the one that fits your use case to
+# flowgate.yaml and adjust as needed.
+#
+# Environment variables are expanded: ${VAR} is replaced at load time.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXAMPLE 1 — Notification throttling (the origin use case)
+#
+# Use this when FlowGate sits in front of a notification system: email, push,
+# SMS. It prevents inbox flooding while ensuring critical messages always get
+# through immediately.
+# ══════════════════════════════════════════════════════════════════════════════
+
+version: "1.0"
+
+subject:
+  id_field: "user_id"          # which field in the event identifies the recipient
+  timezone_field: "user_tz"    # IANA tz ("America/New_York") for waking-hours math
+  waking_hours:
+    start: "07:00"
+    end:   "22:00"
+
+priorities:
+  # Critical: OTPs, order confirmations, password resets — always send now.
+  - name: critical
+    match:
+      - field: "type"
+        in: ["otp", "order_confirmed", "password_reset", "payment_failed"]
+    bypass_all: true            # ignores all caps and quiet hours
+
+  # Triggered: event-driven, personal — send during waking hours, max 10/day.
+  - name: triggered
+    match:
+      - field: "type"
+        in: ["item_shipped", "review_request", "back_in_stock"]
+
+  # Time-bound: time-sensitive but not critical — short delay window.
+  - name: time_bound
+    match:
+      - field: "type"
+        prefix: "flash_"
+
+  # Bulk: marketing campaigns — heavy throttle, digest mode.
+  - name: bulk
+    match:
+      - field: "type"
+        prefix: "marketing_"
+    default: true               # catches anything that doesn't match above
+
+policies:
+  - priority: critical
+    decision: send_now
+
+  - priority: triggered
+    window:
+      respect_waking_hours: true
+      max_delay: 12h
+    caps:
+      - scope: subject
+        period: 1d
+        limit: 10
+    decision_on_cap_breach: suppress
+
+  - priority: time_bound
+    window:
+      respect_waking_hours: true
+      max_delay: 6h             # if it can't fire in 6h, suppress it
+    caps:
+      - scope: subject
+        period: 1h
+        limit: 3
+    decision_on_cap_breach: suppress
+
+  - priority: bulk
+    window:
+      respect_waking_hours: true
+      max_delay: 48h
+    caps:
+      - scope: subject
+        period: 1d
+        limit: 2
+    decision_on_cap_breach: suppress
+    digest:
+      enabled:   true
+      wait:      4h             # batch suppressed bulk into a digest every 4h
+      max_items: 10
+
+callbacks:
+  send_now:
+    url:    "${NOTIFY_WEBHOOK_URL}"
+    method: POST
+    retries: 3
+  suppressed:
+    url:           "${NOTIFY_WEBHOOK_URL}/suppressed"
+    method:        POST
+    include_reason: true
+  digest_ready:
+    url:    "${NOTIFY_WEBHOOK_URL}/digest"
+    method: POST
+
+storage:
+  backend: sqlite
+  dsn:     /data/flowgate.db
+
+server:
+  port: 7700
+  auth:
+    type:   jwt
+    secret: "${FLOWGATE_SECRET}"
+  dashboard:
+    enabled: true
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXAMPLE 2 — API rate shaping
+#
+# Use this when FlowGate governs outbound API calls or webhook fan-out.
+# Subjects are API clients, not humans — no waking hours, caps by time bucket.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# version: "1.0"
+#
+# subject:
+#   id_field: "client_id"      # API key or service name, not a user
+#
+# priorities:
+#   - name: realtime
+#     match:
+#       - field: "urgency"
+#         equals: "realtime"
+#     bypass_all: true
+#
+#   - name: standard
+#     match:
+#       - field: "urgency"
+#         in: ["high", "normal"]
+#
+#   - name: batch
+#     match:
+#       - field: "urgency"
+#         equals: "low"
+#     default: true
+#
+# policies:
+#   - priority: realtime
+#     decision: send_now
+#
+#   - priority: standard
+#     caps:
+#       - scope: subject
+#         period: 1m
+#         limit: 30            # 30 req/min per client
+#       - scope: subject
+#         period: 1h
+#         limit: 500
+#     decision_on_cap_breach: delay
+#     window:
+#       max_delay: 10m
+#
+#   - priority: batch
+#     caps:
+#       - scope: subject
+#         period: 1h
+#         limit: 100
+#       - scope: subject
+#         period: 1d
+#         limit: 1000
+#     decision_on_cap_breach: suppress
+#
+# callbacks:
+#   send_now:
+#     url:    "${API_RELAY_URL}"
+#     method: POST
+#
+# storage:
+#   backend: sqlite
+#   dsn:     /data/flowgate.db
+#
+# server:
+#   port: 7700
+#   auth:
+#     type:   jwt
+#     secret: "${FLOWGATE_SECRET}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXAMPLE 3 — Webhook deduplication
+#
+# Use this when upstream systems send duplicate webhooks for the same event.
+# FlowGate suppresses repeats from the same source within a rolling window.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# version: "1.0"
+#
+# subject:
+#   id_field: "webhook_source"  # e.g. "github/repo-push/abc123"
+#
+# priorities:
+#   - name: critical
+#     match:
+#       - field: "severity"
+#         equals: "critical"
+#     bypass_all: true          # critical webhooks always pass through
+#
+#   - name: normal
+#     default: true
+#
+# policies:
+#   - priority: critical
+#     decision: send_now
+#
+#   - priority: normal
+#     caps:
+#       # Allow only 1 event per source per 5 minutes — dedup window.
+#       - scope: subject
+#         period: 5m
+#         limit: 1
+#     decision_on_cap_breach: suppress
+#
+# callbacks:
+#   send_now:
+#     url:    "${WEBHOOK_RELAY_URL}"
+#     method: POST
+#   suppressed:
+#     url:           "${WEBHOOK_RELAY_URL}/deduped"
+#     method:        POST
+#     include_reason: true
+#
+# storage:
+#   backend: sqlite
+#   dsn:     /data/flowgate.db
+#
+# server:
+#   port: 7700
+#   auth:
+#     type:   none              # internal service — no auth needed

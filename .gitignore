@@ -1,0 +1,29 @@
+# User config — copy from config/flowgate.example.yaml and edit
+flowgate.yaml
+
+# SQLite data files — directory is committed via data/.gitkeep
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Built Go binary
+bin/
+
+# React build output — committed as a placeholder only;
+# real build is done by 'make build' or the Dockerfile Node stage.
+internal/dashboard/dist/*
+!internal/dashboard/dist/index.html
+
+# Node
+dashboard/node_modules/
+
+# Environment files
+*.env
+.env.*
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

@@ -1,0 +1,21 @@
+services:
+  flowgate:
+    build: .
+    ports:
+      - "7700:7700"
+    volumes:
+      # SQLite database lives here — persists across restarts.
+      - ./data:/data
+      # Mount your config. Copy config/flowgate.example.yaml → flowgate.yaml first.
+      - ./flowgate.yaml:/etc/flowgate/flowgate.yaml:ro
+    environment:
+      FLOWGATE_SECRET: ${FLOWGATE_SECRET:-change-me-in-production}
+      FLOWGATE_CONFIG_PATH: /etc/flowgate/flowgate.yaml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:7700/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

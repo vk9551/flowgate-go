@@ -49,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /v1/health", s.handleHealth)
 	mux.HandleFunc("POST /v1/events", s.handleEventsPost)
+	mux.HandleFunc("POST /v1/events/{event_id}/outcome", s.handleOutcomePost)
 	mux.HandleFunc("GET /v1/subjects/{id}", s.handleSubjectGet)
 	mux.HandleFunc("DELETE /v1/subjects/{id}", s.handleSubjectDelete)
 	mux.HandleFunc("GET /v1/policies", s.handlePoliciesGet)

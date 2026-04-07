@@ -6,6 +6,8 @@ export interface Stats {
   suppression_rate: number
   avg_delay_seconds: number
   active_scheduled: number
+  outcome_counts: Record<string, number>
+  delivery_success_rate: number
 }
 
 export interface EventRecord {
@@ -16,12 +18,16 @@ export interface EventRecord {
   reason: string
   occurred_at: string
   deliver_at?: string
+  outcome?: string
+  outcome_reason?: string
+  resolved_at?: string
 }
 
 export interface Subject {
   id: string
   timezone: string
   updated_at: string
+  channel_health?: Record<string, string>
 }
 
 export interface SubjectDetail {

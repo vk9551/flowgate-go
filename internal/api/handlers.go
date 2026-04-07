@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -246,6 +247,90 @@ func (s *Server) handleEventsRecent(w http.ResponseWriter, r *http.Request) {
 		events = []*store.EventRecord{}
 	}
 	writeJSON(w, http.StatusOK, events)
+}
+
+// ── POST /v1/events/{event_id}/outcome ───────────────────────────────────────
+
+type outcomeRequest struct {
+	Outcome  string         `json:"outcome"`
+	Reason   string         `json:"reason"`
+	Metadata map[string]any `json:"metadata"`
+}
+
+type outcomeResponse struct {
+	EventID         string `json:"event_id"`
+	Outcome         string `json:"outcome"`
+	CapRefunded     bool   `json:"cap_refunded"`
+	PreviousOutcome string `json:"previous_outcome"`
+}
+
+func (s *Server) handleOutcomePost(w http.ResponseWriter, r *http.Request) {
+	eventID := r.PathValue("event_id")
+	cfg := s.getConfig()
+
+	var req outcomeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.Outcome == "" {
+		writeError(w, http.StatusBadRequest, "outcome is required")
+		return
+	}
+
+	// Validate outcome name and capture refund flag before mutating state.
+	outcomeCfg := findOutcomeCfgInConfig(cfg, req.Outcome)
+	if outcomeCfg == nil {
+		writeError(w, http.StatusBadRequest, "unknown outcome: "+req.Outcome)
+		return
+	}
+
+	// Fetch current event to capture previous_outcome.
+	ev, err := s.store.EventGetByID(eventID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	if ev == nil {
+		writeError(w, http.StatusNotFound, "event not found: "+eventID)
+		return
+	}
+	previousOutcome := ev.Outcome
+
+	// Extract optional channel from metadata.
+	channel := ""
+	if ch, ok := req.Metadata["channel"].(string); ok {
+		channel = ch
+	}
+
+	if err := engine.ProcessOutcome(eventID, req.Outcome, req.Reason, channel, s.store, cfg); err != nil {
+		switch {
+		case errors.Is(err, engine.ErrEventNotFound):
+			writeError(w, http.StatusNotFound, "event not found: "+eventID)
+		case errors.Is(err, engine.ErrOutcomeConflict):
+			writeError(w, http.StatusConflict, err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, outcomeResponse{
+		EventID:         eventID,
+		Outcome:         req.Outcome,
+		CapRefunded:     outcomeCfg.RefundCap,
+		PreviousOutcome: previousOutcome,
+	})
+}
+
+// findOutcomeCfgInConfig is the handler-side helper (avoids importing engine internals).
+func findOutcomeCfgInConfig(cfg *config.Config, name string) *config.OutcomeCfg {
+	for i := range cfg.Outcomes {
+		if cfg.Outcomes[i].Name == name {
+			return &cfg.Outcomes[i]
+		}
+	}
+	return nil
 }
 
 // ── GET /v1/health ────────────────────────────────────────────────────────────

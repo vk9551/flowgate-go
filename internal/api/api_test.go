@@ -16,6 +16,20 @@ import (
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+// postOutcome sends POST /v1/events/{id}/outcome.
+func postOutcome(t *testing.T, handler http.Handler, eventID string, body map[string]any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/"+eventID+"/outcome", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	return rr
+}
+
 // testCfg builds a minimal config for tests.
 func testCfg(secret string) *config.Config {
 	return &config.Config{
@@ -52,6 +66,13 @@ func testCfg(secret string) *config.Config {
 			Port: 7700,
 			Auth: config.AuthCfg{Type: "jwt", Secret: secret},
 		},
+		Outcomes: []config.OutcomeCfg{
+			{Name: "success", RefundCap: false, Terminal: true},
+			{Name: "failed_temp", RefundCap: true, Terminal: false},
+			{Name: "failed_perm", RefundCap: true, Terminal: true},
+			{Name: "pending", RefundCap: false, Terminal: false},
+		},
+		DefaultOutcome: "pending",
 	}
 }
 
@@ -326,5 +347,111 @@ func TestAuthNone_SkipsVerification(t *testing.T) {
 	// No token provided, auth=none — should reach the handler (200 or 422, not 401).
 	if rr.Code == http.StatusUnauthorized {
 		t.Errorf("auth=none should not return 401, got %d", rr.Code)
+	}
+}
+
+// ── Outcome endpoint tests ───────────────────────────────────────────────────
+
+func TestOutcome_ValidEvent_CapRefunded(t *testing.T) {
+	const secret = "s3cr3t"
+	srv, _ := newTestServer(t, secret)
+	token := makeToken(secret)
+	h := srv.Handler()
+
+	// Create an event.
+	rr := postEvent(t, h, map[string]any{"user_id": "u10", "type": "marketing_weekly"}, token)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("post event: %d %s", rr.Code, rr.Body.String())
+	}
+	var evResp eventResponse
+	json.NewDecoder(rr.Body).Decode(&evResp)
+
+	// POST outcome: failed_temp (cap_refunded=true).
+	rr2 := postOutcome(t, h, evResp.EventID, map[string]any{
+		"outcome": "failed_temp",
+		"reason":  "connection_timeout",
+	}, token)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("post outcome: %d %s", rr2.Code, rr2.Body.String())
+	}
+
+	var or outcomeResponse
+	if err := json.NewDecoder(rr2.Body).Decode(&or); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if or.EventID != evResp.EventID {
+		t.Errorf("event_id: got %q, want %q", or.EventID, evResp.EventID)
+	}
+	if or.Outcome != "failed_temp" {
+		t.Errorf("outcome: got %q, want failed_temp", or.Outcome)
+	}
+	if !or.CapRefunded {
+		t.Error("cap_refunded: want true for failed_temp")
+	}
+	if or.PreviousOutcome != "pending" {
+		t.Errorf("previous_outcome: got %q, want pending", or.PreviousOutcome)
+	}
+}
+
+func TestOutcome_UnknownEventID_404(t *testing.T) {
+	const secret = "s3cr3t"
+	srv, _ := newTestServer(t, secret)
+	token := makeToken(secret)
+
+	rr := postOutcome(t, srv.Handler(), "no-such-event", map[string]any{"outcome": "success"}, token)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestOutcome_InvalidOutcomeName_400(t *testing.T) {
+	const secret = "s3cr3t"
+	srv, _ := newTestServer(t, secret)
+	token := makeToken(secret)
+	h := srv.Handler()
+
+	rr := postEvent(t, h, map[string]any{"user_id": "u11", "type": "otp"}, token)
+	var evResp eventResponse
+	json.NewDecoder(rr.Body).Decode(&evResp)
+
+	rr2 := postOutcome(t, h, evResp.EventID, map[string]any{"outcome": "not_a_real_outcome"}, token)
+	if rr2.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr2.Code)
+	}
+}
+
+func TestSubjectGet_ChannelHealth_AfterFailedPerm(t *testing.T) {
+	const secret = "s3cr3t"
+	srv, _ := newTestServer(t, secret)
+	token := makeToken(secret)
+	h := srv.Handler()
+
+	// Create event.
+	rr := postEvent(t, h, map[string]any{"user_id": "u12", "type": "otp"}, token)
+	var evResp eventResponse
+	json.NewDecoder(rr.Body).Decode(&evResp)
+
+	// Report failed_perm with channel=email.
+	postOutcome(t, h, evResp.EventID, map[string]any{
+		"outcome":  "failed_perm",
+		"reason":   "hard_bounce",
+		"metadata": map[string]any{"channel": "email"},
+	}, token)
+
+	// GET subject — channel_health should show email:failed_perm.
+	req := httptest.NewRequest(http.MethodGet, "/v1/subjects/u12", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, req)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("get subject: %d %s", rr2.Code, rr2.Body.String())
+	}
+	var resp subjectResponse
+	if err := json.NewDecoder(rr2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Subject.ChannelHealth["email"] != "failed_perm" {
+		t.Errorf("channel_health[email]: got %q, want failed_perm", resp.Subject.ChannelHealth["email"])
 	}
 }

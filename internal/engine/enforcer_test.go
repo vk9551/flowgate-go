@@ -30,16 +30,19 @@ var defaultSubjectCfg = config.SubjectCfg{
 	},
 }
 
-// wakingTime returns a UTC time that corresponds to 10:00 AM in New York.
-// In April, New York is UTC-4 so 10:00 AM NY = 14:00 UTC.
+// wakingTime returns today's 10:00 AM New York time in UTC.
+// Using today's date keeps seeded events within the rolling 24-hour cap window.
 func wakingTime() time.Time {
-	return time.Date(2026, 4, 6, 14, 0, 0, 0, time.UTC) // 10:00 NY local
+	loc, _ := time.LoadLocation("America/New_York")
+	y, m, d := time.Now().In(loc).Date()
+	return time.Date(y, m, d, 10, 0, 0, 0, loc).UTC()
 }
 
-// quietTime returns a UTC time that corresponds to 02:00 AM in New York.
-// 02:00 AM NY = 06:00 UTC.
+// quietTime returns today's 02:00 AM New York time in UTC.
 func quietTime() time.Time {
-	return time.Date(2026, 4, 6, 6, 0, 0, 0, time.UTC) // 02:00 NY local
+	loc, _ := time.LoadLocation("America/New_York")
+	y, m, d := time.Now().In(loc).Date()
+	return time.Date(y, m, d, 2, 0, 0, 0, loc).UTC()
 }
 
 func nySubject() *store.Subject {
@@ -113,7 +116,7 @@ func TestCheckAndRecord(t *testing.T) {
 		{
 			name: "at cap limit (exactly limit events already recorded) → SUPPRESS",
 			setup: func(t *testing.T, st store.Store) {
-				appendEvents(t, st, "u1", "bulk", 3, wakingTime().Add(-1*time.Hour))
+				appendEvents(t, st, "u1", "bulk", 3, time.Now().UTC().Add(-1*time.Hour))
 			},
 			subject:     nySubject(),
 			priority:    bulkPriority(),
@@ -126,7 +129,7 @@ func TestCheckAndRecord(t *testing.T) {
 		{
 			name: "over cap → SUPPRESS",
 			setup: func(t *testing.T, st store.Store) {
-				appendEvents(t, st, "u1", "bulk", 5, wakingTime().Add(-30*time.Minute))
+				appendEvents(t, st, "u1", "bulk", 5, time.Now().UTC().Add(-30*time.Minute))
 			},
 			subject:     nySubject(),
 			priority:    bulkPriority(),
@@ -161,7 +164,7 @@ func TestCheckAndRecord(t *testing.T) {
 		{
 			name: "bypass_all overrides even when over cap",
 			setup: func(t *testing.T, st store.Store) {
-				appendEvents(t, st, "u1", "critical", 99, wakingTime().Add(-1*time.Hour))
+				appendEvents(t, st, "u1", "critical", 99, time.Now().UTC().Add(-1*time.Hour))
 			},
 			subject:     nySubject(),
 			priority:    criticalPriority(),
@@ -174,8 +177,8 @@ func TestCheckAndRecord(t *testing.T) {
 		{
 			name: "old events outside rolling window don't count toward cap",
 			setup: func(t *testing.T, st store.Store) {
-				// Insert events 25 hours ago — outside the 1d window.
-				old := wakingTime().Add(-25 * time.Hour)
+				// Insert events 26 hours ago — always outside the 1d window.
+				old := time.Now().UTC().Add(-26 * time.Hour)
 				appendEvents(t, st, "u1", "bulk", 5, old)
 			},
 			subject:     nySubject(),
@@ -260,7 +263,7 @@ func TestCheckAndRecord_EventRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	now := wakingTime()
+	now := time.Now().UTC()
 	_, err := CheckAndRecord(sub, bulkPriority(), bulkPolicy(10), defaultSubjectCfg, st, "evt-abc", now)
 	if err != nil {
 		t.Fatalf("CheckAndRecord: %v", err)

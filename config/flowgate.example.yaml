@@ -1,62 +1,58 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # FlowGate example configurations
 #
-# Three ready-to-use examples. Copy the one that fits your use case to
-# flowgate.yaml and adjust as needed.
+# Three ready-to-use starting points. Copy the one closest to your use case
+# to flowgate.yaml and adjust as needed.
 #
 # Environment variables are expanded: ${VAR} is replaced at load time.
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# EXAMPLE 1 — Notification throttling (the origin use case)
+# EXAMPLE 1 — Per-subject action throttling
 #
-# Use this when FlowGate sits in front of a notification system: email, push,
-# SMS. It prevents inbox flooding while ensuring critical messages always get
-# through immediately.
+# Use this when subjects (users, devices, tenants) trigger actions at varying
+# urgency levels and you need to enforce per-subject rate limits with an
+# active-window constraint. Critical actions always pass through. Lower-priority
+# ones are capped, delayed to the subject's active hours, and batched when
+# suppressed.
 # ══════════════════════════════════════════════════════════════════════════════
 
 version: "1.0"
 
 subject:
-  id_field: "user_id"          # which field in the event identifies the recipient
-  timezone_field: "user_tz"    # IANA tz ("America/New_York") for waking-hours math
+  id_field: "user_id"          # which field in the event identifies the subject
+  timezone_field: "user_tz"    # IANA tz ("America/New_York") for active-window math
   waking_hours:
     start: "07:00"
     end:   "22:00"
 
 priorities:
-  # Critical: OTPs, order confirmations, password resets — always send now.
+  # Critical: time-sensitive, must act immediately regardless of caps or hours.
   - name: critical
     match:
-      - field: "type"
-        in: ["otp", "order_confirmed", "password_reset", "payment_failed"]
-    bypass_all: true            # ignores all caps and quiet hours
+      - field: "urgency"
+        equals: "critical"
+    bypass_all: true            # skips all caps and active-window checks
 
-  # Triggered: event-driven, personal — send during waking hours, max 10/day.
-  - name: triggered
+  # Standard: act during active hours, capped per day.
+  - name: standard
     match:
-      - field: "type"
-        in: ["item_shipped", "review_request", "back_in_stock"]
+      - field: "urgency"
+        in: ["high", "normal"]
 
-  # Time-bound: time-sensitive but not critical — short delay window.
-  - name: time_bound
-    match:
-      - field: "type"
-        prefix: "flash_"
-
-  # Bulk: marketing campaigns — heavy throttle, digest mode.
+  # Bulk: low-urgency, heavy throttle, batch suppressed events into a digest.
   - name: bulk
     match:
-      - field: "type"
-        prefix: "marketing_"
+      - field: "urgency"
+        equals: "low"
     default: true               # catches anything that doesn't match above
 
 policies:
   - priority: critical
     decision: send_now
 
-  - priority: triggered
+  - priority: standard
     window:
       respect_waking_hours: true
       max_delay: 12h
@@ -64,16 +60,6 @@ policies:
       - scope: subject
         period: 1d
         limit: 10
-    decision_on_cap_breach: suppress
-
-  - priority: time_bound
-    window:
-      respect_waking_hours: true
-      max_delay: 6h             # if it can't fire in 6h, suppress it
-    caps:
-      - scope: subject
-        period: 1h
-        limit: 3
     decision_on_cap_breach: suppress
 
   - priority: bulk
@@ -87,20 +73,20 @@ policies:
     decision_on_cap_breach: suppress
     digest:
       enabled:   true
-      wait:      4h             # batch suppressed bulk into a digest every 4h
+      wait:      4h             # batch suppressed events into a digest every 4h
       max_items: 10
 
 callbacks:
   send_now:
-    url:    "${NOTIFY_WEBHOOK_URL}"
+    url:    "${ACTION_WEBHOOK_URL}"
     method: POST
     retries: 3
   suppressed:
-    url:           "${NOTIFY_WEBHOOK_URL}/suppressed"
+    url:           "${ACTION_WEBHOOK_URL}/dropped"
     method:        POST
     include_reason: true
   digest_ready:
-    url:    "${NOTIFY_WEBHOOK_URL}/digest"
+    url:    "${ACTION_WEBHOOK_URL}/digest"
     method: POST
 
 storage:
@@ -117,16 +103,17 @@ server:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# EXAMPLE 2 — API rate shaping
+# EXAMPLE 2 — Outbound rate shaping
 #
-# Use this when FlowGate governs outbound API calls or webhook fan-out.
-# Subjects are API clients, not humans — no waking hours, caps by time bucket.
+# Use this when FlowGate governs outbound calls to downstream systems that
+# have their own rate limits. Subjects are callers (clients, services, tenants).
+# No active-window constraint — caps are purely time-bucket based.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # version: "1.0"
 #
 # subject:
-#   id_field: "client_id"      # API key or service name, not a user
+#   id_field: "client_id"        # identifies the calling client or tenant
 #
 # priorities:
 #   - name: realtime
@@ -154,7 +141,7 @@ server:
 #     caps:
 #       - scope: subject
 #         period: 1m
-#         limit: 30            # 30 req/min per client
+#         limit: 30              # 30 actions/min per client
 #       - scope: subject
 #         period: 1h
 #         limit: 500
@@ -174,7 +161,7 @@ server:
 #
 # callbacks:
 #   send_now:
-#     url:    "${API_RELAY_URL}"
+#     url:    "${DOWNSTREAM_URL}"
 #     method: POST
 #
 # storage:
@@ -189,23 +176,24 @@ server:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# EXAMPLE 3 — Webhook deduplication
+# EXAMPLE 3 — Duplicate suppression
 #
-# Use this when upstream systems send duplicate webhooks for the same event.
-# FlowGate suppresses repeats from the same source within a rolling window.
+# Use this when upstream systems fire the same event multiple times.
+# FlowGate suppresses repeats from the same source within a rolling window,
+# letting only the first through.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # version: "1.0"
 #
 # subject:
-#   id_field: "webhook_source"  # e.g. "github/repo-push/abc123"
+#   id_field: "source_id"        # stable identifier for the event source
 #
 # priorities:
 #   - name: critical
 #     match:
 #       - field: "severity"
 #         equals: "critical"
-#     bypass_all: true          # critical webhooks always pass through
+#     bypass_all: true           # critical events always pass through
 #
 #   - name: normal
 #     default: true
@@ -224,10 +212,10 @@ server:
 #
 # callbacks:
 #   send_now:
-#     url:    "${WEBHOOK_RELAY_URL}"
+#     url:    "${RELAY_URL}"
 #     method: POST
 #   suppressed:
-#     url:           "${WEBHOOK_RELAY_URL}/deduped"
+#     url:           "${RELAY_URL}/dropped"
 #     method:        POST
 #     include_reason: true
 #
@@ -238,4 +226,4 @@ server:
 # server:
 #   port: 7700
 #   auth:
-#     type:   none              # internal service — no auth needed
+#     type:   none               # internal service — no auth needed

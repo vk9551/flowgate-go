@@ -4,13 +4,15 @@ import "time"
 
 // Config is the top-level structure for flowgate.yaml.
 type Config struct {
-	Version    string       `yaml:"version"`
-	Subject    SubjectCfg   `yaml:"subject"`
-	Priorities []Priority   `yaml:"priorities"`
-	Policies   []Policy     `yaml:"policies"`
-	Callbacks  CallbacksCfg `yaml:"callbacks"`
-	Storage    StorageCfg   `yaml:"storage"`
-	Server     ServerCfg    `yaml:"server"`
+	Version        string       `yaml:"version"`
+	Subject        SubjectCfg   `yaml:"subject"`
+	Priorities     []Priority   `yaml:"priorities"`
+	Policies       []Policy     `yaml:"policies"`
+	Callbacks      CallbacksCfg `yaml:"callbacks"`
+	Storage        StorageCfg   `yaml:"storage"`
+	Server         ServerCfg    `yaml:"server"`
+	Outcomes       []OutcomeCfg `yaml:"outcomes"`        // delivery feedback outcomes; defaults applied if empty
+	DefaultOutcome string       `yaml:"default_outcome"` // outcome assigned on event creation; default "pending"
 }
 
 // SubjectCfg describes how to identify and localize a subject.
@@ -119,3 +121,18 @@ type AuthCfg struct {
 type DashCfg struct {
 	Enabled bool `yaml:"enabled"`
 }
+
+// OutcomeCfg defines a named delivery outcome that callers can report back.
+type OutcomeCfg struct {
+	Name      string `yaml:"name"`
+	RefundCap bool   `yaml:"refund_cap"` // true → remove event from cap window on this outcome
+	Terminal  bool   `yaml:"terminal"`   // true → no further outcome updates allowed
+}
+
+// Default outcome names.
+const (
+	OutcomeNameSuccess    = "success"
+	OutcomeNameFailedTemp = "failed_temp"
+	OutcomeNameFailedPerm = "failed_perm"
+	OutcomeNamePending    = "pending"
+)

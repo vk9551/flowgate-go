@@ -8,6 +8,13 @@ function decisionClass(d: string) {
   return 'decision-suppress'
 }
 
+function outcomeClass(o?: string) {
+  if (!o || o === 'pending') return 'outcome-pending'
+  if (o === 'success') return 'outcome-success'
+  if (o === 'failed_temp') return 'outcome-failed-temp'
+  return 'outcome-failed-perm'
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString()
 }
@@ -49,6 +56,7 @@ export function Events() {
                 <th>Decision</th>
                 <th>Reason</th>
                 <th>Deliver at</th>
+                <th>Outcome</th>
               </tr>
             </thead>
             <tbody>
@@ -60,6 +68,7 @@ export function Events() {
                   <td><span className={`badge badge-${e.decision.toLowerCase().replace('_', '-')}`}>{e.decision}</span></td>
                   <td className="reason">{e.reason}</td>
                   <td className="mono">{e.deliver_at ? fmt(e.deliver_at) : '—'}</td>
+                  <td><span className={`badge ${outcomeClass(e.outcome)}`}>{e.outcome || 'pending'}</span></td>
                 </tr>
               ))}
             </tbody>

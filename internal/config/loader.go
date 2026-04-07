@@ -34,6 +34,8 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	applyDefaultOutcomes(&cfg)
+
 	return &cfg, nil
 }
 
@@ -95,6 +97,21 @@ func parseDuration(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
+// applyDefaultOutcomes fills in built-in outcomes when none are configured in YAML.
+func applyDefaultOutcomes(cfg *Config) {
+	if len(cfg.Outcomes) == 0 {
+		cfg.Outcomes = []OutcomeCfg{
+			{Name: OutcomeNameSuccess, RefundCap: false, Terminal: true},
+			{Name: OutcomeNameFailedTemp, RefundCap: true, Terminal: false},
+			{Name: OutcomeNameFailedPerm, RefundCap: true, Terminal: true},
+			{Name: OutcomeNamePending, RefundCap: false, Terminal: false},
+		}
+	}
+	if cfg.DefaultOutcome == "" {
+		cfg.DefaultOutcome = OutcomeNamePending
+	}
+}
+
 // validate checks for required fields and logical consistency.
 func validate(cfg *Config) error {
 	if cfg.Subject.IDField == "" {
@@ -117,6 +134,21 @@ func validate(cfg *Config) error {
 	}
 	if defaultCount > 1 {
 		return fmt.Errorf("config: at most one priority may be marked default, found %d", defaultCount)
+	}
+
+	// Validate outcome names are unique.
+	outcomeNames := make(map[string]bool)
+	for _, o := range cfg.Outcomes {
+		if o.Name == "" {
+			return fmt.Errorf("config: outcome entry missing name")
+		}
+		if outcomeNames[o.Name] {
+			return fmt.Errorf("config: duplicate outcome name %q", o.Name)
+		}
+		outcomeNames[o.Name] = true
+	}
+	if cfg.DefaultOutcome != "" && len(outcomeNames) > 0 && !outcomeNames[cfg.DefaultOutcome] {
+		return fmt.Errorf("config: default_outcome %q not in outcomes list", cfg.DefaultOutcome)
 	}
 
 	for _, pol := range cfg.Policies {

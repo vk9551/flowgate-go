@@ -64,6 +64,19 @@ export function Subjects() {
             <div><span className="meta-key">Last seen</span><span>{fmt(result.subject.updated_at)}</span></div>
           </div>
 
+          {result.subject.channel_health && Object.keys(result.subject.channel_health).length > 0 && (
+            <div className="channel-health">
+              <div className="sub-section-title">Channel health</div>
+              <div className="channel-badges">
+                {Object.entries(result.subject.channel_health).map(([ch, outcome]) => (
+                  <span key={ch} className={`channel-badge channel-badge-${outcome.replace('_', '-')}`}>
+                    {ch}: {outcome}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="sub-section-title">Event history (last 20)</div>
           {result.history.length === 0 ? (
             <div className="empty">No events recorded.</div>

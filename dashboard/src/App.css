@@ -167,6 +167,12 @@ a { color: var(--accent); text-decoration: none; }
 .badge-delay     { background: #451a03; color: var(--amber); }
 .badge-suppress  { background: #450a0a; color: var(--red); }
 
+/* Outcome badges */
+.outcome-success      { background: #14532d; color: var(--green); }
+.outcome-failed-temp  { background: #451a03; color: var(--amber); }
+.outcome-failed-perm  { background: #450a0a; color: var(--red); }
+.outcome-pending      { background: #1e1e2e; color: var(--text-dim); }
+
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .mono { font-family: var(--font-mono); }
 .reason { color: var(--text-dim); font-size: 0.78rem; }
@@ -186,6 +192,22 @@ a { color: var(--accent); text-decoration: none; }
   width: 340px;
 }
 .search-input:focus { outline: none; border-color: var(--accent); }
+
+/* ── Channel health ─────────────────────────────────────────────────────────── */
+.channel-health { margin-bottom: 1.5rem; }
+.channel-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.channel-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.channel-badge-success      { background: #14532d; color: var(--green); }
+.channel-badge-failed-temp  { background: #451a03; color: var(--amber); }
+.channel-badge-failed-perm  { background: #450a0a; color: var(--red); }
+.channel-badge-pending      { background: #1e1e2e; color: var(--text-dim); }
 
 .subject-result { margin-top: 0.5rem; }
 .subject-meta {

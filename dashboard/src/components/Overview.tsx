@@ -35,6 +35,16 @@ export function Overview() {
     ? `${Math.round(stats.avg_delay_seconds / 60)}m avg`
     : '—'
 
+  const successRate = stats.delivery_success_rate != null
+    ? `${stats.delivery_success_rate.toFixed(1)}%`
+    : '—'
+
+  const resolved = stats.outcome_counts
+    ? Object.entries(stats.outcome_counts)
+        .filter(([k]) => k !== 'pending')
+        .reduce((s, [, v]) => s + v, 0)
+    : 0
+
   return (
     <div>
       <div className="section-header">
@@ -48,6 +58,11 @@ export function Overview() {
         <StatCard label="Suppressed" value={stats.suppressed} sub={`${stats.suppression_rate.toFixed(1)}%`} />
         <StatCard label="Active scheduled" value={stats.active_scheduled} />
         <StatCard label="Suppression rate" value={`${stats.suppression_rate.toFixed(1)}%`} />
+        <StatCard
+          label="Delivery success rate"
+          value={successRate}
+          sub={resolved > 0 ? `${resolved} resolved` : 'no outcomes yet'}
+        />
       </div>
     </div>
   )

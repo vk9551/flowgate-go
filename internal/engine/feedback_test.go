@@ -47,8 +47,8 @@ func seedEvent(t *testing.T, st store.Store, subjectID, priority string) string 
 		ID:         eventID,
 		SubjectID:  subjectID,
 		Priority:   priority,
-		Decision:   "SEND_NOW",
-		Reason:     "send_now",
+		Decision:   "ACT_NOW",
+		Reason:     "act_now",
 		OccurredAt: time.Now().UTC(),
 	}
 	if err := st.EventAppend(subjectID, rec); err != nil {
@@ -92,8 +92,8 @@ func TestProcessOutcome_FailedTemp(t *testing.T) {
 		ID:         eventID,
 		SubjectID:  "u2",
 		Priority:   "bulk",
-		Decision:   "SEND_NOW",
-		Reason:     "send_now",
+		Decision:   "ACT_NOW",
+		Reason:     "act_now",
 		OccurredAt: now,
 	}
 	st.EventAppend("u2", rec)

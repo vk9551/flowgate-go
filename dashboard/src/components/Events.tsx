@@ -3,7 +3,7 @@ import { api } from '../api'
 import type { EventRecord } from '../types'
 
 function decisionClass(d: string) {
-  if (d === 'SEND_NOW') return 'decision-send'
+  if (d === 'ACT_NOW') return 'decision-send'
   if (d === 'DELAY') return 'decision-delay'
   return 'decision-suppress'
 }

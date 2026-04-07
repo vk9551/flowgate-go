@@ -11,20 +11,12 @@ import (
 	"github.com/vk9551/flowgate-io/internal/store"
 )
 
-// Scheduler is the subset of scheduler.Scheduler used by the API.
-// Defined here so the api package doesn't import the scheduler package
-// (interfaces belong in the consuming package per project convention).
-type Scheduler interface {
-	Schedule(e *store.ScheduledEvent) error
-}
-
 // Server holds all runtime dependencies for the API.
 type Server struct {
 	cfgPath   string
 	cfg       *config.Config
 	cfgMu     sync.RWMutex // guards cfg for hot-reload
 	store     store.Store
-	sched     Scheduler // may be nil if scheduler not wired
 	startTime time.Time
 }
 
@@ -36,11 +28,6 @@ func NewServer(cfgPath string, cfg *config.Config, st store.Store) *Server {
 		store:     st,
 		startTime: time.Now(),
 	}
-}
-
-// SetScheduler wires the scheduler so DELAY decisions are enqueued.
-func (s *Server) SetScheduler(sched Scheduler) {
-	s.sched = sched
 }
 
 // Handler returns an http.Handler with the full middleware chain applied.
@@ -69,12 +56,6 @@ func (s *Server) getConfig() *config.Config {
 	s.cfgMu.RLock()
 	defer s.cfgMu.RUnlock()
 	return s.cfg
-}
-
-// GetConfig is the exported version of getConfig, used by external packages
-// (e.g. dispatcher) that need the live config.
-func (s *Server) GetConfig() *config.Config {
-	return s.getConfig()
 }
 
 // setConfig replaces the active config under a write lock.

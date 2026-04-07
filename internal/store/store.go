@@ -19,7 +19,7 @@ type EventRecord struct {
 	ID            string    `json:"id"`
 	SubjectID     string    `json:"subject_id"`
 	Priority      string    `json:"priority"`
-	Decision      string    `json:"decision"` // SEND_NOW | DELAY | SUPPRESS
+	Decision      string    `json:"decision"` // ACT_NOW | DELAY | SUPPRESS
 	Reason        string    `json:"reason"`
 	OccurredAt    time.Time `json:"occurred_at"`
 	DeliverAt     time.Time `json:"deliver_at,omitempty"`     // non-zero only for DELAY decisions
@@ -28,26 +28,15 @@ type EventRecord struct {
 	ResolvedAt    time.Time `json:"resolved_at,omitempty"`    // when the terminal outcome was recorded
 }
 
-// ScheduledEvent is a delayed event waiting to be delivered.
-type ScheduledEvent struct {
-	ID        string    `json:"id"`
-	SubjectID string    `json:"subject_id"`
-	Priority  string    `json:"priority"`
-	Payload   string    `json:"payload"` // raw JSON from caller
-	DeliverAt time.Time `json:"deliver_at"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 // Stats holds aggregated decision counts for a time window (typically today)
 // plus all-time delivery outcome counts.
 type Stats struct {
 	TotalToday          int            `json:"total_today"`
-	SendNow             int            `json:"send_now"`
+	ActNow              int            `json:"act_now"`
 	Delayed             int            `json:"delayed"`
 	Suppressed          int            `json:"suppressed"`
 	SuppressionRate     float64        `json:"suppression_rate"`
 	AvgDelaySeconds     float64        `json:"avg_delay_seconds"`
-	ActiveScheduled     int            `json:"active_scheduled"`
 	OutcomeCounts       map[string]int `json:"outcome_counts"`       // all-time outcome tallies
 	DeliverySuccessRate float64        `json:"delivery_success_rate"` // success / (success+failed_*) × 100
 }
@@ -61,8 +50,8 @@ type Store interface {
 	// SubjectUpsert creates or updates a subject record.
 	SubjectUpsert(s *Subject) error
 
-	// SubjectReset deletes a subject's event history and scheduled events,
-	// effectively resetting all caps. The subject row itself is preserved.
+	// SubjectReset deletes a subject's event history, effectively resetting all caps.
+	// The subject row itself is preserved.
 	SubjectReset(id string) error
 
 	// EventAppend writes a decision record to the event log.
@@ -83,22 +72,8 @@ type Store interface {
 	// decision outcome (e.g. "SUPPRESS") occurred within the rolling period.
 	CountDecisions(subjectID, decision, period string) (int, error)
 
-	// StatsToday returns aggregated decision counts since the start of the
-	// current UTC day, plus active scheduled event count.
+	// StatsToday returns aggregated decision counts since the start of the current UTC day.
 	StatsToday() (*Stats, error)
-
-	// ScheduledList returns all scheduled events with DeliverAt <= before.
-	ScheduledList(before time.Time) ([]*ScheduledEvent, error)
-
-	// ScheduledListAll returns every scheduled event regardless of DeliverAt.
-	// Used on scheduler startup to restore in-memory heap state.
-	ScheduledListAll() ([]*ScheduledEvent, error)
-
-	// ScheduledInsert persists a new scheduled event.
-	ScheduledInsert(e *ScheduledEvent) error
-
-	// ScheduledDelete removes a scheduled event by ID.
-	ScheduledDelete(id string) error
 
 	// EventGetByID fetches a single event by ID. Returns nil, nil if not found.
 	EventGetByID(eventID string) (*EventRecord, error)

@@ -10,7 +10,7 @@ import (
 
 // Decision is the outcome FlowGate returns for an event.
 type Decision struct {
-	Outcome    string    // SEND_NOW | DELAY | SUPPRESS
+	Outcome    string    // ACT_NOW | DELAY | SUPPRESS
 	Reason     string    // machine-readable reason code
 	DeliverAt  time.Time // set when Outcome == DELAY
 	Priority   string
@@ -18,7 +18,7 @@ type Decision struct {
 
 // Reason codes.
 const (
-	ReasonSendNow       = "send_now"
+	ReasonSendNow       = "act_now"
 	ReasonBypassAll     = "bypass_all"
 	ReasonQuietHours    = "quiet_hours"
 	ReasonCapBreached   = "cap_breached"
@@ -27,7 +27,7 @@ const (
 
 // Outcome values.
 const (
-	OutcomeSendNow  = "SEND_NOW"
+	OutcomeSendNow  = "ACT_NOW"
 	OutcomeDelay    = "DELAY"
 	OutcomeSuppress = "SUPPRESS"
 )
@@ -82,7 +82,7 @@ func CheckAndRecord(
 	if policy.Window.RespectWakingHours {
 		inWindow, nextOpen, whErr := inWakingWindow(subject, subjectCfg, now)
 		if whErr != nil {
-			// Non-fatal: fall through to SEND_NOW if tz is unknown.
+			// Non-fatal: fall through to ACT_NOW if tz is unknown.
 			// TODO: consider making this stricter if tz is required.
 			_ = whErr
 		} else if !inWindow {
@@ -194,7 +194,7 @@ func parseHHMM(s string) (int, int, error) {
 // normaliseOutcome maps config decision strings to canonical outcome constants.
 func normaliseOutcome(s string) string {
 	switch s {
-	case "send_now":
+	case "act_now":
 		return OutcomeSendNow
 	case "suppress":
 		return OutcomeSuppress

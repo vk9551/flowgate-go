@@ -12,8 +12,6 @@ import (
 
 	"github.com/vk9551/flowgate-io/internal/api"
 	"github.com/vk9551/flowgate-io/internal/config"
-	"github.com/vk9551/flowgate-io/internal/dispatcher"
-	"github.com/vk9551/flowgate-io/internal/scheduler"
 	"github.com/vk9551/flowgate-io/internal/store"
 )
 
@@ -39,29 +37,7 @@ func main() {
 	}
 	defer st.Close()
 
-	// API server (holds the live config pointer).
 	apiSrv := api.NewServer(cfgPath, cfg, st)
-
-	// Dispatcher reads the live config through the server's getter so that
-	// a hot-reload propagates to future dispatch calls.
-	disp := dispatcher.New(apiSrv.GetConfig)
-
-	// Scheduler: on fire → dispatch → delete from store.
-	sched := scheduler.New(st, func(e *store.ScheduledEvent) {
-		if err := disp.Dispatch(e, "send_now"); err != nil {
-			log.Printf("dispatcher: event %s: %v", e.ID, err)
-		}
-	}, 0 /* default 5s interval */)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := sched.Start(ctx); err != nil {
-		log.Fatalf("flowgate: start scheduler: %v", err)
-	}
-	log.Println("flowgate: scheduler started")
-
-	apiSrv.SetScheduler(sched)
 
 	port := cfg.Server.Port
 	if port == 0 {
@@ -96,9 +72,6 @@ func main() {
 	if err := httpSrv.Shutdown(shutCtx); err != nil {
 		log.Printf("flowgate: HTTP shutdown error: %v", err)
 	}
-
-	cancel() // signal scheduler to stop
-	sched.Stop()
 
 	log.Println("flowgate: stopped")
 }

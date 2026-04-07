@@ -52,7 +52,7 @@ func testCfg(secret string) *config.Config {
 			},
 		},
 		Policies: []config.Policy{
-			{Priority: "critical", Decision: "send_now"},
+			{Priority: "critical", Decision: "act_now"},
 			{
 				Priority: "bulk",
 				Window:   config.WindowCfg{RespectWakingHours: false}, // disable quiet hours for test simplicity
@@ -177,7 +177,7 @@ func TestEvents_BypassAll_SendNow(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp.Decision != engine.OutcomeSendNow {
-		t.Errorf("decision: got %q, want SEND_NOW", resp.Decision)
+		t.Errorf("decision: got %q, want ACT_NOW", resp.Decision)
 	}
 	if resp.Reason != engine.ReasonBypassAll {
 		t.Errorf("reason: got %q, want bypass_all", resp.Reason)
@@ -204,7 +204,7 @@ func TestEvents_CapBreach_Suppress(t *testing.T) {
 	var r1 eventResponse
 	json.NewDecoder(rr1.Body).Decode(&r1)
 	if r1.Decision != engine.OutcomeSendNow {
-		t.Errorf("first: got %q, want SEND_NOW", r1.Decision)
+		t.Errorf("first: got %q, want ACT_NOW", r1.Decision)
 	}
 
 	// Second event — cap breached.

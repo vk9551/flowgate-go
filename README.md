@@ -10,7 +10,7 @@ FlowGate never executes anything. It decides. You act.
 
 - **Routes by priority** — high-urgency events pass through immediately; lower-priority ones respect active-window constraints and rolling caps
 - **Enforces rate limits and active-window policies** — per-subject, rolling-window caps; delays outside configurable windows rather than dropping
-- **Returns synchronous decisions** — your service gets `SEND_NOW`, `DELAY <timestamp>`, or `SUPPRESS` in one HTTP call; no polling
+- **Returns synchronous decisions** — your service gets `ACT_NOW`, `DELAY <timestamp>`, or `SUPPRESS` in one HTTP call; no polling
 
 ## What it doesn't do
 
@@ -53,8 +53,8 @@ Response:
 ```json
 {
   "event_id": "3f1a2b4c-...",
-  "decision": "SEND_NOW",
-  "reason": "send_now",
+  "decision": "ACT_NOW",
+  "reason": "act_now",
   "priority": "bulk",
   "suppressed_today": 0
 }
@@ -82,7 +82,7 @@ Every event goes through three stages:
 **1. Priority matching** — event fields are matched against YAML rules (exact value, prefix, suffix, list membership, field existence). First match wins. A `default: true` priority catches everything else.
 
 **2. Policy evaluation** — the matched priority's policy is applied:
-- `bypass_all: true` → straight to `SEND_NOW`, no further checks
+- `bypass_all: true` → straight to `ACT_NOW`, no further checks
 - Cap check → count events for this subject+priority in the rolling window; breach → `decision_on_cap_breach`
 - Active-window check → if outside the subject's configured active hours, `DELAY` with a `deliver_at` timestamp
 
@@ -90,8 +90,8 @@ Every event goes through three stages:
 
 | Decision | Meaning |
 |----------|---------|
-| `SEND_NOW` | Act now |
-| `DELAY` | Act later; FlowGate calls your webhook when the window opens |
+| `ACT_NOW` | Act now |
+| `DELAY` | Act later; `deliver_at` tells you when — your system handles scheduling |
 | `SUPPRESS` | Drop; reason code included |
 
 FlowGate writes every decision to its event log (feeds the dashboard and caps).
@@ -132,7 +132,7 @@ priorities:
 
 policies:
   - priority: critical
-    decision: send_now
+    decision: act_now
 
   - priority: standard
     window:
@@ -153,23 +153,6 @@ policies:
         period: 1d
         limit: 2
     decision_on_cap_breach: suppress
-    digest:
-      enabled: true
-      wait: 4h                 # batch suppressed events into one callback
-      max_items: 10
-
-callbacks:
-  send_now:
-    url:    "${ACTION_WEBHOOK_URL}"
-    method: POST
-    retries: 3
-  suppressed:
-    url:    "${ACTION_WEBHOOK_URL}/dropped"
-    method: POST
-    include_reason: true
-  digest_ready:
-    url:    "${ACTION_WEBHOOK_URL}/digest"
-    method: POST
 
 storage:
   backend: sqlite
@@ -372,12 +355,11 @@ default_outcome: pending
 ```json
 {
   "total_today":    17,
-  "send_now":       15,
+  "act_now":        15,
   "delayed":         0,
   "suppressed":      2,
   "suppression_rate": 11.76,
   "avg_delay_seconds": 0,
-  "active_scheduled": 0,
   "outcome_counts": {
     "success":     3,
     "failed_temp": 0,
@@ -398,7 +380,7 @@ default_outcome: pending
 
 You have subjects triggering the same low-urgency action repeatedly. Without control, they overwhelm the downstream system.
 
-Set a rolling cap per subject per day. High-urgency events bypass it entirely. Lower-priority ones are capped, delayed to the subject's active window, and batched into a digest callback when suppressed. The downstream only processes what it can handle.
+Set a rolling cap per subject per day. High-urgency events bypass it entirely. Lower-priority ones are capped and delayed to the subject's active window. The downstream only processes what it can handle.
 
 → See `# EXAMPLE 1` in `config/flowgate.example.yaml`
 
@@ -438,7 +420,7 @@ FlowGate is that single decision point. It's intentionally domain-agnostic — i
 
 ```bash
 cp config/flowgate.example.yaml flowgate.yaml
-# Edit flowgate.yaml — set your webhook URLs, caps, priorities.
+# Edit flowgate.yaml — set your caps, priorities, and active-window settings.
 
 export FLOWGATE_SECRET=$(openssl rand -hex 32)
 docker-compose up -d

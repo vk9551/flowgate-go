@@ -69,7 +69,7 @@ func criticalPriority() *config.Priority {
 }
 
 func criticalPolicy() *config.Policy {
-	return &config.Policy{Priority: "critical", Decision: "send_now"}
+	return &config.Policy{Priority: "critical", Decision: "act_now"}
 }
 
 // appendEvents writes n past events for subject/priority into the store.

@@ -90,8 +90,8 @@ func (s *Server) handleEventsPost(w http.ResponseWriter, r *http.Request) {
 	// Find policy for this priority.
 	policy := findPolicy(cfg, priority.Name)
 	if policy == nil {
-		// No policy means send_now (no constraints defined).
-		policy = &config.Policy{Priority: priority.Name, Decision: "send_now"}
+		// No policy means act_now (no constraints defined).
+		policy = &config.Policy{Priority: priority.Name, Decision: "act_now"}
 	}
 
 	eventID := uuid.New().String()
@@ -101,24 +101,6 @@ func (s *Server) handleEventsPost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine error: "+err.Error())
 		return
-	}
-
-	// If the decision is DELAY, enqueue it in the scheduler.
-	if decision.Outcome == engine.OutcomeDelay && s.sched != nil {
-		rawPayload, _ := json.Marshal(raw)
-		se := &store.ScheduledEvent{
-			ID:        eventID,
-			SubjectID: subjectID,
-			Priority:  decision.Priority,
-			Payload:   string(rawPayload),
-			DeliverAt: decision.DeliverAt,
-			CreatedAt: now,
-		}
-		if err := s.sched.Schedule(se); err != nil {
-			// Non-fatal: log and continue. The decision has already been recorded.
-			// TODO: consider returning 500 here if strict delivery is required.
-			_ = err
-		}
 	}
 
 	// Count suppressed events today for this subject (all priorities).

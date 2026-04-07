@@ -60,17 +60,6 @@ CREATE TABLE IF NOT EXISTS event_log (
 CREATE INDEX IF NOT EXISTS idx_event_log_subject_priority_time
     ON event_log (subject_id, priority, occurred_at);
 
-CREATE TABLE IF NOT EXISTS scheduled_events (
-    id          TEXT PRIMARY KEY,
-    subject_id  TEXT NOT NULL,
-    priority    TEXT NOT NULL,
-    payload     TEXT NOT NULL DEFAULT '',
-    deliver_at  INTEGER NOT NULL,  -- unix seconds
-    created_at  INTEGER NOT NULL   -- unix seconds
-);
-
-CREATE INDEX IF NOT EXISTS idx_scheduled_deliver
-    ON scheduled_events (deliver_at);
 `
 
 func (s *SQLiteStore) migrate() error {
@@ -144,22 +133,14 @@ func (s *SQLiteStore) EventAppend(subjectID string, e *EventRecord) error {
 	return nil
 }
 
-// SubjectReset deletes all event history and scheduled events for a subject,
-// resetting all caps. The subject row itself is preserved.
+// SubjectReset deletes all event history for a subject, resetting all caps.
+// The subject row itself is preserved.
 func (s *SQLiteStore) SubjectReset(id string) error {
-	tx, err := s.db.Begin()
+	_, err := s.db.Exec(`DELETE FROM event_log WHERE subject_id = ?`, id)
 	if err != nil {
-		return fmt.Errorf("store: SubjectReset begin: %w", err)
+		return fmt.Errorf("store: SubjectReset %q: %w", id, err)
 	}
-	defer tx.Rollback() //nolint:errcheck
-
-	if _, err := tx.Exec(`DELETE FROM event_log WHERE subject_id = ?`, id); err != nil {
-		return fmt.Errorf("store: SubjectReset event_log %q: %w", id, err)
-	}
-	if _, err := tx.Exec(`DELETE FROM scheduled_events WHERE subject_id = ?`, id); err != nil {
-		return fmt.Errorf("store: SubjectReset scheduled_events %q: %w", id, err)
-	}
-	return tx.Commit()
+	return nil
 }
 
 // EventList returns up to limit recent events for subjectID, newest first.
@@ -216,8 +197,8 @@ func (s *SQLiteStore) StatsToday() (*Stats, error) {
 		}
 		stats.TotalToday += count
 		switch decision {
-		case "SEND_NOW":
-			stats.SendNow = count
+		case "ACT_NOW":
+			stats.ActNow = count
 		case "DELAY":
 			stats.Delayed = count
 		case "SUPPRESS":
@@ -245,12 +226,6 @@ func (s *SQLiteStore) StatsToday() (*Stats, error) {
 	}
 	if avgDelay.Valid {
 		stats.AvgDelaySeconds = avgDelay.Float64
-	}
-
-	// Active scheduled events count.
-	err = s.db.QueryRow(`SELECT COUNT(*) FROM scheduled_events`).Scan(&stats.ActiveScheduled)
-	if err != nil {
-		return nil, fmt.Errorf("store: StatsToday scheduled: %w", err)
 	}
 
 	// All-time outcome counts for delivery success rate.
@@ -358,79 +333,6 @@ func (s *SQLiteStore) CountEvents(subjectID, priority, period string) (int, erro
 		return 0, fmt.Errorf("store: CountEvents: %w", err)
 	}
 	return count, nil
-}
-
-// ScheduledList returns all scheduled events with deliver_at <= before.
-func (s *SQLiteStore) ScheduledList(before time.Time) ([]*ScheduledEvent, error) {
-	rows, err := s.db.Query(
-		`SELECT id, subject_id, priority, payload, deliver_at, created_at
-         FROM scheduled_events WHERE deliver_at <= ? ORDER BY deliver_at`,
-		before.Unix(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("store: ScheduledList: %w", err)
-	}
-	defer rows.Close()
-
-	var events []*ScheduledEvent
-	for rows.Next() {
-		var e ScheduledEvent
-		var deliverUnix, createdUnix int64
-		if err := rows.Scan(&e.ID, &e.SubjectID, &e.Priority, &e.Payload, &deliverUnix, &createdUnix); err != nil {
-			return nil, fmt.Errorf("store: ScheduledList scan: %w", err)
-		}
-		e.DeliverAt = time.Unix(deliverUnix, 0).UTC()
-		e.CreatedAt = time.Unix(createdUnix, 0).UTC()
-		events = append(events, &e)
-	}
-	return events, rows.Err()
-}
-
-// ScheduledListAll returns every scheduled event, ordered by deliver_at.
-func (s *SQLiteStore) ScheduledListAll() ([]*ScheduledEvent, error) {
-	rows, err := s.db.Query(
-		`SELECT id, subject_id, priority, payload, deliver_at, created_at
-         FROM scheduled_events ORDER BY deliver_at`,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("store: ScheduledListAll: %w", err)
-	}
-	defer rows.Close()
-
-	var events []*ScheduledEvent
-	for rows.Next() {
-		var e ScheduledEvent
-		var deliverUnix, createdUnix int64
-		if err := rows.Scan(&e.ID, &e.SubjectID, &e.Priority, &e.Payload, &deliverUnix, &createdUnix); err != nil {
-			return nil, fmt.Errorf("store: ScheduledListAll scan: %w", err)
-		}
-		e.DeliverAt = time.Unix(deliverUnix, 0).UTC()
-		e.CreatedAt = time.Unix(createdUnix, 0).UTC()
-		events = append(events, &e)
-	}
-	return events, rows.Err()
-}
-
-// ScheduledInsert persists a new scheduled event.
-func (s *SQLiteStore) ScheduledInsert(e *ScheduledEvent) error {
-	_, err := s.db.Exec(
-		`INSERT INTO scheduled_events (id, subject_id, priority, payload, deliver_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-		e.ID, e.SubjectID, e.Priority, e.Payload, e.DeliverAt.Unix(), e.CreatedAt.Unix(),
-	)
-	if err != nil {
-		return fmt.Errorf("store: ScheduledInsert %q: %w", e.ID, err)
-	}
-	return nil
-}
-
-// ScheduledDelete removes a scheduled event by ID.
-func (s *SQLiteStore) ScheduledDelete(id string) error {
-	_, err := s.db.Exec(`DELETE FROM scheduled_events WHERE id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("store: ScheduledDelete %q: %w", id, err)
-	}
-	return nil
 }
 
 // EventGetByID fetches a single event by its ID. Returns nil, nil if not found.

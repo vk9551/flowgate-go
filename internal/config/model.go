@@ -8,10 +8,9 @@ type Config struct {
 	Subject        SubjectCfg   `yaml:"subject"`
 	Priorities     []Priority   `yaml:"priorities"`
 	Policies       []Policy     `yaml:"policies"`
-	Callbacks      CallbacksCfg `yaml:"callbacks"`
 	Storage        StorageCfg   `yaml:"storage"`
 	Server         ServerCfg    `yaml:"server"`
-	Outcomes       []OutcomeCfg `yaml:"outcomes"`        // delivery feedback outcomes; defaults applied if empty
+	Outcomes       []OutcomeCfg `yaml:"outcomes"`        // execution outcomes; defaults applied if empty
 	DefaultOutcome string       `yaml:"default_outcome"` // outcome assigned on event creation; default "pending"
 }
 
@@ -22,7 +21,7 @@ type SubjectCfg struct {
 	WakingHours   WakingHours `yaml:"waking_hours"`
 }
 
-// WakingHours defines the default active window (HH:MM format).
+// WakingHours defines the subject's active window (HH:MM format).
 type WakingHours struct {
 	Start string `yaml:"start"`
 	End   string `yaml:"end"`
@@ -50,11 +49,10 @@ type MatchRule struct {
 // Policy defines the decision rules for a priority tier.
 type Policy struct {
 	Priority            string    `yaml:"priority"`
-	Decision            string    `yaml:"decision"` // send_now | suppress
+	Decision            string    `yaml:"decision"` // act_now | suppress
 	Window              WindowCfg `yaml:"window"`
 	Caps                []CapRule `yaml:"caps"`
 	DecisionOnCapBreach string    `yaml:"decision_on_cap_breach"`
-	Digest              DigestCfg `yaml:"digest"`
 }
 
 // WindowCfg controls delay-window behaviour.
@@ -70,32 +68,6 @@ type CapRule struct {
 	Period    time.Duration `yaml:"-"`     // parsed from PeriodRaw
 	PeriodRaw string        `yaml:"period"`
 	Limit     int           `yaml:"limit"`
-}
-
-// DigestCfg enables digest mode: suppressed events are batched and delivered
-// as a single digest callback after Wait duration (or when MaxItems is reached).
-type DigestCfg struct {
-	Enabled  bool          `yaml:"enabled"`
-	Wait     time.Duration `yaml:"-"` // parsed from WaitRaw
-	WaitRaw  string        `yaml:"wait"`
-	MaxItems int           `yaml:"max_items"` // 0 means no item-count limit
-}
-
-// CallbacksCfg holds webhook targets for different decision outcomes.
-type CallbacksCfg struct {
-	SendNow     *CallbackTarget `yaml:"send_now"`
-	Delayed     *CallbackTarget `yaml:"delayed"`
-	Suppressed  *CallbackTarget `yaml:"suppressed"`
-	DigestReady *CallbackTarget `yaml:"digest_ready"`
-}
-
-// CallbackTarget is a single webhook endpoint.
-type CallbackTarget struct {
-	URL           string `yaml:"url"`
-	Method        string `yaml:"method"`
-	IncludeReason bool   `yaml:"include_reason"`
-	Retries       int    `yaml:"retries"`      // 0 → default (3)
-	BackoffBase   string `yaml:"backoff_base"` // "" → default ("1s")
 }
 
 // StorageCfg selects and configures the storage backend.
@@ -122,7 +94,7 @@ type DashCfg struct {
 	Enabled bool `yaml:"enabled"`
 }
 
-// OutcomeCfg defines a named delivery outcome that callers can report back.
+// OutcomeCfg defines a named execution outcome that callers can report back.
 type OutcomeCfg struct {
 	Name      string `yaml:"name"`
 	RefundCap bool   `yaml:"refund_cap"` // true → remove event from cap window on this outcome

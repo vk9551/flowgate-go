@@ -38,7 +38,7 @@ priorities:
     default: true
 policies:
   - priority: critical
-    decision: send_now
+    decision: act_now
   - priority: bulk
     decision: suppress
 storage:
@@ -143,7 +143,7 @@ priorities:
   - name: critical
 policies:
   - priority: ghost
-    decision: send_now
+    decision: act_now
 `
 	_, err := Load(writeTemp(t, yaml))
 	if err == nil {

@@ -1,11 +1,10 @@
 export interface Stats {
   total_today: number
-  send_now: number
+  act_now: number
   delayed: number
   suppressed: number
   suppression_rate: number
   avg_delay_seconds: number
-  active_scheduled: number
   outcome_counts: Record<string, number>
   delivery_success_rate: number
 }
@@ -14,7 +13,7 @@ export interface EventRecord {
   id: string
   subject_id: string
   priority: string
-  decision: 'SEND_NOW' | 'DELAY' | 'SUPPRESS'
+  decision: 'ACT_NOW' | 'DELAY' | 'SUPPRESS'
   reason: string
   occurred_at: string
   deliver_at?: string

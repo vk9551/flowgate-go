@@ -50,7 +50,7 @@ priorities:
 
 policies:
   - priority: critical
-    decision: send_now
+    decision: act_now
 
   - priority: standard
     window:
@@ -71,23 +71,6 @@ policies:
         period: 1d
         limit: 2
     decision_on_cap_breach: suppress
-    digest:
-      enabled:   true
-      wait:      4h             # batch suppressed events into a digest every 4h
-      max_items: 10
-
-callbacks:
-  send_now:
-    url:    "${ACTION_WEBHOOK_URL}"
-    method: POST
-    retries: 3
-  suppressed:
-    url:           "${ACTION_WEBHOOK_URL}/dropped"
-    method:        POST
-    include_reason: true
-  digest_ready:
-    url:    "${ACTION_WEBHOOK_URL}/digest"
-    method: POST
 
 storage:
   backend: sqlite
@@ -135,7 +118,7 @@ server:
 #
 # policies:
 #   - priority: realtime
-#     decision: send_now
+#     decision: act_now
 #
 #   - priority: standard
 #     caps:
@@ -200,7 +183,7 @@ server:
 #
 # policies:
 #   - priority: critical
-#     decision: send_now
+#     decision: act_now
 #
 #   - priority: normal
 #     caps:

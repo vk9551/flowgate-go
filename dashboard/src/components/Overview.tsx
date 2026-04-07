@@ -53,10 +53,9 @@ export function Overview() {
       </div>
       <div className="stat-grid">
         <StatCard label="Total" value={stats.total_today} />
-        <StatCard label="Send now" value={stats.send_now} />
+        <StatCard label="Act now" value={stats.act_now} />
         <StatCard label="Delayed" value={stats.delayed} sub={avgDelay} />
         <StatCard label="Suppressed" value={stats.suppressed} sub={`${stats.suppression_rate.toFixed(1)}%`} />
-        <StatCard label="Active scheduled" value={stats.active_scheduled} />
         <StatCard label="Suppression rate" value={`${stats.suppression_rate.toFixed(1)}%`} />
         <StatCard
           label="Delivery success rate"

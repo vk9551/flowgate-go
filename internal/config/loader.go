@@ -72,13 +72,6 @@ func parseDurations(cfg *Config) error {
 				c.Period = d
 			}
 		}
-		if p.Digest.WaitRaw != "" {
-			d, err := parseDuration(p.Digest.WaitRaw)
-			if err != nil {
-				return fmt.Errorf("config: policy %q digest.wait: %w", p.Priority, err)
-			}
-			p.Digest.Wait = d
-		}
 	}
 	return nil
 }

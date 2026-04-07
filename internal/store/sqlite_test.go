@@ -66,7 +66,7 @@ func TestEventAppendAndCount(t *testing.T) {
 			ID:         "e" + string(rune('0'+i)),
 			SubjectID:  "u1",
 			Priority:   "bulk",
-			Decision:   "SEND_NOW",
+			Decision:   "ACT_NOW",
 			OccurredAt: now,
 		})
 		if err != nil {
@@ -97,13 +97,13 @@ func TestCountEvents_RollingWindow(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		st.EventAppend("u1", &EventRecord{
 			ID: "recent" + string(rune('0'+i)), SubjectID: "u1",
-			Priority: "bulk", Decision: "SEND_NOW", OccurredAt: now.Add(-30 * time.Minute),
+			Priority: "bulk", Decision: "ACT_NOW", OccurredAt: now.Add(-30 * time.Minute),
 		})
 	}
 	// One old event (25 hours ago — outside 1d window).
 	st.EventAppend("u1", &EventRecord{
 		ID: "old", SubjectID: "u1",
-		Priority: "bulk", Decision: "SEND_NOW", OccurredAt: now.Add(-25 * time.Hour),
+		Priority: "bulk", Decision: "ACT_NOW", OccurredAt: now.Add(-25 * time.Hour),
 	})
 
 	count, err := st.CountEvents("u1", "bulk", "1d")
@@ -115,43 +115,3 @@ func TestCountEvents_RollingWindow(t *testing.T) {
 	}
 }
 
-func TestScheduledInsertListDelete(t *testing.T) {
-	st := openMem(t)
-	now := time.Now().UTC().Truncate(time.Second)
-	future := now.Add(2 * time.Hour)
-
-	e := &ScheduledEvent{
-		ID: "sched1", SubjectID: "u1", Priority: "bulk",
-		Payload: `{"type":"newsletter"}`, DeliverAt: future, CreatedAt: now,
-	}
-	if err := st.ScheduledInsert(e); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-
-	// Before deliver_at: nothing due.
-	list, err := st.ScheduledList(now)
-	if err != nil {
-		t.Fatalf("list (before): %v", err)
-	}
-	if len(list) != 0 {
-		t.Errorf("expected 0 due events, got %d", len(list))
-	}
-
-	// At/after deliver_at: should appear.
-	list, err = st.ScheduledList(future)
-	if err != nil {
-		t.Fatalf("list (at): %v", err)
-	}
-	if len(list) != 1 || list[0].ID != "sched1" {
-		t.Errorf("expected sched1, got %+v", list)
-	}
-
-	// Delete and verify gone.
-	if err := st.ScheduledDelete("sched1"); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	list, _ = st.ScheduledList(future)
-	if len(list) != 0 {
-		t.Errorf("after delete: expected 0, got %d", len(list))
-	}
-}

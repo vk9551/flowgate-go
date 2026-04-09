@@ -495,6 +495,19 @@ make clean    # remove bin/ and dist/
 
 ---
 
+## Part of the FlowGate project
+
+| Implementation | Repo | Language |
+|---------------|------|----------|
+| flowgate-go     | github.com/vk9551/flowgate-go     | Go                   |
+| flowgate-node   | github.com/vk9551/flowgate-node   | TypeScript / Node.js |
+| flowgate-python | github.com/vk9551/flowgate-python | Python               |
+| flowgate-java   | github.com/vk9551/flowgate-java   | Java                 |
+
+The YAML policy format, API contract, and decision logic are identical across implementations. `flowgate.yaml` files are interchangeable.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

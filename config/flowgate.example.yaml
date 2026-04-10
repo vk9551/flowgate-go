@@ -78,6 +78,7 @@ storage:
 
 server:
   port: 7700
+  grpc_port: 7701
   auth:
     type:   jwt
     secret: "${FLOWGATE_SECRET}"

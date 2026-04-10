@@ -1,4 +1,4 @@
-.PHONY: build dev test clean docker-build docker-up docker-down
+.PHONY: build dev test clean docker-build docker-up docker-down proto
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 # Full production build: React dashboard → Go binary (static, embedded).
@@ -32,6 +32,16 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+# ── Proto codegen ─────────────────────────────────────────────────────────────
+proto:
+	mkdir -p internal/grpc/pb
+	protoc --go_out=internal/grpc/pb \
+	       --go_opt=paths=source_relative \
+	       --go-grpc_out=internal/grpc/pb \
+	       --go-grpc_opt=paths=source_relative \
+	       -I proto \
+	       proto/flowgate.proto
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 clean:

@@ -1,0 +1,169 @@
+// flowgate.proto — shared contract for all FlowGate implementations
+// Version: 1.0.0
+// All language implementations generate their gRPC stubs from this file.
+// Never edit the proto inside a language repo — edit here, then regenerate.
+
+syntax = "proto3";
+
+package flowgate.v1;
+
+option go_package = "github.com/vk9551/flowgate-go/gen/pb";
+option java_package = "io.flowgate.gen";
+option java_multiple_files = true;
+
+// ── Core service ──────────────────────────────────────────────────────────
+
+service FlowGate {
+
+  // Submit a single event, get a decision synchronously
+  rpc Evaluate(EvaluateRequest) returns (Decision);
+
+  // Report delivery outcome back to FlowGate
+  rpc ReportOutcome(OutcomeRequest) returns (OutcomeResult);
+
+  // High-throughput: stream many events, get decisions back
+  // Client sends events as fast as it wants
+  // Server responds to each in order
+  rpc EvaluateStream(stream EvaluateRequest)
+      returns (stream Decision);
+
+  // Subject management
+  rpc GetSubject(GetSubjectRequest) returns (SubjectResponse);
+  rpc ResetSubject(ResetSubjectRequest) returns (ResetSubjectResponse);
+
+  // Policy management
+  rpc GetPolicies(GetPoliciesRequest) returns (PoliciesResponse);
+  rpc ReloadPolicies(ReloadPoliciesRequest)
+      returns (ReloadPoliciesResponse);
+
+  // Observability
+  rpc GetStats(GetStatsRequest) returns (Stats);
+  rpc GetRecentEvents(GetRecentEventsRequest)
+      returns (RecentEventsResponse);
+
+  // Liveness
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ── Evaluate ──────────────────────────────────────────────────────────────
+
+message EvaluateRequest {
+  string subject_id           = 1;  // maps to config.subject.id_field
+  string type                 = 2;  // event type — used for priority matching
+  string channel              = 3;  // client-owned — not used by FlowGate
+  int64  expiry_at            = 4;  // unix ms — 0 means no expiry
+  string subject_tz           = 5;  // IANA timezone, e.g. "America/New_York"
+  map<string, string> metadata = 6; // arbitrary fields for match rules
+}
+
+message Decision {
+  string decision         = 1;  // "SEND_NOW" | "DELAY" | "SUPPRESS"
+  string reason           = 2;  // e.g. "cap_exceeded", "quiet_hours"
+  int64  deliver_at       = 3;  // unix ms — only set when decision=DELAY
+  string priority         = 4;  // matched priority tier name
+  string event_id         = 5;  // use this for ReportOutcome
+  int32  suppressed_today = 6;  // count of suppressions for this subject today
+}
+
+// ── Outcome ───────────────────────────────────────────────────────────────
+
+message OutcomeRequest {
+  string event_id = 1;
+  string outcome  = 2;  // must match a name in config.outcomes
+  string reason   = 3;  // free-form, e.g. "connection_timeout"
+}
+
+message OutcomeResult {
+  string event_id          = 1;
+  string outcome           = 2;
+  bool   cap_refunded      = 3;
+  string previous_outcome  = 4;
+}
+
+// ── Subject ───────────────────────────────────────────────────────────────
+
+message GetSubjectRequest {
+  string subject_id = 1;
+}
+
+message SubjectResponse {
+  string subject_id                   = 1;
+  string timezone                     = 2;
+  map<string, string> channel_health  = 3;
+  repeated EventSummary recent_events = 4;
+}
+
+message EventSummary {
+  string event_id   = 1;
+  string type       = 2;
+  string decision   = 3;
+  string reason     = 4;
+  string outcome    = 5;
+  int64  occurred_at = 6;
+}
+
+message ResetSubjectRequest {
+  string subject_id = 1;
+}
+
+message ResetSubjectResponse {
+  string status = 1;  // "reset"
+}
+
+// ── Policy ────────────────────────────────────────────────────────────────
+
+message GetPoliciesRequest {}
+
+message PoliciesResponse {
+  string config_json = 1;  // current loaded config as JSON string
+}
+
+message ReloadPoliciesRequest {}
+
+message ReloadPoliciesResponse {
+  string status      = 1;  // "reloaded"
+  int32  priorities  = 2;  // number of priority tiers loaded
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+
+message GetStatsRequest {}
+
+message Stats {
+  int64  total_today            = 1;
+  int64  send_now               = 2;
+  int64  delayed                = 3;
+  int64  suppressed             = 4;
+  int64  active_scheduled       = 5;
+  double suppression_rate       = 6;
+  double avg_delay_seconds      = 7;
+  double delivery_success_rate  = 8;
+  OutcomeCounts outcome_counts  = 9;
+}
+
+message OutcomeCounts {
+  int64 success      = 1;
+  int64 failed_temp  = 2;
+  int64 failed_perm  = 3;
+  int64 pending      = 4;
+}
+
+// ── Recent events ─────────────────────────────────────────────────────────
+
+message GetRecentEventsRequest {
+  int32 limit = 1;  // default 50
+}
+
+message RecentEventsResponse {
+  repeated EventSummary events = 1;
+}
+
+// ── Health ────────────────────────────────────────────────────────────────
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status   = 1;  // "ok"
+  int64  uptime   = 2;  // seconds
+  string version  = 3;  // "1.0.0"
+}

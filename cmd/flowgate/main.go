@@ -12,6 +12,7 @@ import (
 
 	"github.com/vk9551/flowgate-io/internal/api"
 	"github.com/vk9551/flowgate-io/internal/config"
+	flowgategrpc "github.com/vk9551/flowgate-io/internal/grpc"
 	"github.com/vk9551/flowgate-io/internal/store"
 )
 
@@ -59,6 +60,15 @@ func main() {
 			log.Fatalf("flowgate: server error: %v", err)
 		}
 	}()
+
+	// Start gRPC server if configured.
+	if cfg.Server.GrpcPort > 0 {
+		go func() {
+			if err := flowgategrpc.StartGrpcServer(cfg.Server.GrpcPort, cfg, cfgPath, st, time.Now()); err != nil {
+				log.Fatalf("flowgate: gRPC server error: %v", err)
+			}
+		}()
+	}
 
 	// Wait for SIGINT or SIGTERM.
 	quit := make(chan os.Signal, 1)

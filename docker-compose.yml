@@ -3,6 +3,7 @@ services:
     build: .
     ports:
       - "7700:7700"
+      - "7701:7701"
     volumes:
       # SQLite database lives here — persists across restarts.
       - ./data:/data
@@ -11,6 +12,7 @@ services:
     environment:
       FLOWGATE_SECRET: ${FLOWGATE_SECRET:-change-me-in-production}
       FLOWGATE_CONFIG_PATH: /etc/flowgate/flowgate.yaml
+      FLOWGATE_GRPC_PORT: 7701
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",

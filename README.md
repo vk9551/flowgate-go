@@ -22,6 +22,10 @@ No cloud dependencies. No external queue. No database server. Runs on a $5 VPS.
 
 ## Quickstart
 
+FlowGate exposes two ports:
+- **7700** — REST API + dashboard
+- **7701** — gRPC (enable with `grpc_port: 7701` in `flowgate.yaml`)
+
 ```bash
 # 1. Clone
 git clone https://github.com/flowgate/flowgate
@@ -374,6 +378,41 @@ default_outcome: pending
 
 ---
 
+## gRPC API
+
+FlowGate also exposes a gRPC server on port 7701. The service contract is defined in [flowgate-proto](https://github.com/vk9551/flowgate-proto).
+
+Enable in `flowgate.yaml`:
+
+```yaml
+server:
+  port: 7700
+  grpc_port: 7701
+```
+
+Test with grpcurl:
+
+```bash
+grpcurl -plaintext localhost:7701 flowgate.v1.FlowGate/Health
+```
+
+All REST endpoints have gRPC equivalents:
+
+| RPC             | REST equivalent              |
+|-----------------|------------------------------|
+| Evaluate        | POST /v1/events              |
+| ReportOutcome   | POST /v1/events/:id/outcome  |
+| EvaluateStream  | — (streaming only via gRPC)  |
+| GetSubject      | GET /v1/subjects/:id         |
+| ResetSubject    | DELETE /v1/subjects/:id      |
+| GetPolicies     | GET /v1/policies             |
+| ReloadPolicies  | POST /v1/policies/reload     |
+| GetStats        | GET /v1/stats                |
+| GetRecentEvents | GET /v1/events/recent        |
+| Health          | GET /v1/health               |
+
+---
+
 ## Use cases
 
 ### 1. High-frequency action throttling
@@ -503,6 +542,7 @@ make clean    # remove bin/ and dist/
 | flowgate-node   | github.com/vk9551/flowgate-node   | TypeScript / Node.js |
 | flowgate-python | github.com/vk9551/flowgate-python | Python               |
 | flowgate-java   | github.com/vk9551/flowgate-java   | Java                 |
+| flowgate-proto  | github.com/vk9551/flowgate-proto  | Protobuf             |
 
 The YAML policy format, API contract, and decision logic are identical across implementations. `flowgate.yaml` files are interchangeable.
 

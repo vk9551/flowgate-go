@@ -27,3 +27,9 @@ dashboard/node_modules/
 *.swo
 .idea/
 .vscode/
+
+# Go vendor — dependencies are fetched via go mod download
+vendor/
+
+# Generated gRPC stubs — rebuilt by: make proto
+internal/grpc/pb/

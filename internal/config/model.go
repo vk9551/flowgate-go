@@ -79,6 +79,7 @@ type StorageCfg struct {
 // ServerCfg holds HTTP server and auth settings.
 type ServerCfg struct {
 	Port      int     `yaml:"port"`
+	GrpcPort  int     `yaml:"grpc_port"`
 	Auth      AuthCfg `yaml:"auth"`
 	Dashboard DashCfg `yaml:"dashboard"`
 }
